@@ -80,5 +80,43 @@ namespace GraphQL.DataLoader
 
             await task.ConfigureAwait(false);
         }
+
+        /// <summary>
+        /// Dispatch all registered data loaders in series
+        /// </summary>
+        /// <param name="cancellationToken">Optional <seealso cref="CancellationToken"/> to pass to fetch delegate</param>
+        public async Task DispatchAllSeriesAsync(CancellationToken cancellationToken = default)
+        {
+            Task task = null;
+
+            lock (_loaders)
+            {
+                if (_queue.Count == 0)
+                {
+                    return;
+                }
+
+                if (_queue.Count == 1)
+                {
+                    var loader = _queue.Peek();
+                    task = loader.DispatchAsync(cancellationToken);
+                }
+                else
+                {
+                    // We don't want to pop any loaders off the queue because they may get more work later
+                    foreach (var loader in _queue)
+                    {
+                        if (task == null)
+                            task = loader.DispatchAsync(cancellationToken);
+                        else
+#pragma warning disable 4014
+                            task.ContinueWith(t => loader.DispatchAsync(cancellationToken), TaskContinuationOptions.ExecuteSynchronously);
+#pragma warning restore 4014
+                    }
+                }
+            }
+
+            await task.ConfigureAwait(false);
+        }
     }
 }
